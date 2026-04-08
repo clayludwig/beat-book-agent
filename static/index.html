@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Beat Book Builder</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- ── UPLOAD SCREEN ────────────────────────────────────────── -->
+    <div id="upload-screen" class="screen active">
+      <div class="upload-card">
+        <h1>📰 Beat Book Builder</h1>
+        <p class="subtitle">Upload your story files to get started</p>
+
+        <div id="drop-zone" class="drop-zone">
+          <div class="drop-zone-inner">
+            <span class="drop-icon">📁</span>
+            <p>Drag & drop JSON files here</p>
+            <p class="small">or</p>
+            <label class="file-btn">
+              Browse Files
+              <input type="file" id="file-input" accept=".json" multiple hidden>
+            </label>
+          </div>
+        </div>
+
+        <div id="file-list" class="file-list" hidden></div>
+
+        <button id="upload-btn" class="btn primary" disabled>
+          Upload & Analyze Stories
+        </button>
+
+        <div id="upload-status" class="status" hidden>
+          <div class="progress-container">
+            <div class="progress-step" id="progress-step">Preparing…</div>
+            <div class="progress-bar-track">
+              <div class="progress-bar-fill" id="progress-bar"></div>
+            </div>
+            <div class="progress-detail" id="progress-detail"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── CHAT SCREEN ──────────────────────────────────────────── -->
+    <div id="chat-screen" class="screen">
+      <header class="chat-header">
+        <h2>📰 Beat Book Builder</h2>
+        <div id="session-info" class="session-info"></div>
+      </header>
+
+      <div id="chat-messages" class="chat-messages"></div>
+
+      <!-- Dynamic input area — changes based on question type -->
+      <div id="input-area" class="input-area" hidden>
+        <div id="input-container"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

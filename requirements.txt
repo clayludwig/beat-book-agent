@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+openai
+numpy
+umap-learn
+hdbscan
+scikit-learn
+tqdm
