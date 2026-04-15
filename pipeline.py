@@ -147,14 +147,28 @@ def _cluster_sizes(n: int) -> Tuple[int, int]:
 def _reduce(vectors: np.ndarray) -> np.ndarray:
     params = _umap_params(len(vectors))
     print(f"UMAP (n_components={params['n_components']}, n_neighbors={params['n_neighbors']})…")
-    reducer = umap.UMAP(
-        n_components=params["n_components"],
-        n_neighbors=params["n_neighbors"],
-        min_dist=0.0,
-        metric="cosine",
-        random_state=42,
-    )
-    return reducer.fit_transform(vectors)
+
+    def _make_reducer(init: str):
+        return umap.UMAP(
+            n_components=params["n_components"],
+            n_neighbors=params["n_neighbors"],
+            min_dist=0.0,
+            metric="cosine",
+            random_state=42,
+            init=init,
+        )
+
+    # Newer scipy can raise `Cannot use scipy.linalg.eigh for sparse A with
+    # k >= N` inside UMAP's default spectral init when the kNN graph has few
+    # connected components. Fall back to pca → random if that happens.
+    for init in ("spectral", "pca", "random"):
+        try:
+            return _make_reducer(init).fit_transform(vectors)
+        except TypeError as e:
+            if "eigh" not in str(e) and "k >= N" not in str(e):
+                raise
+            print(f"UMAP init={init!r} hit scipy eigh bug; retrying…")
+    raise RuntimeError("UMAP failed with every init strategy")
 
 
 def _cluster(reduced: np.ndarray, min_cluster_size: int):

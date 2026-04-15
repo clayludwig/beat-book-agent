@@ -94,34 +94,51 @@ TOOLS = [
     {
         "name": "interview_user",
         "description": (
-            "Ask the reporter a question to understand their beat and goals. "
-            "Supports four question types:\n"
-            "- 'checklist': multi-select from a list of options\n"
-            "- 'single_choice': pick exactly one option\n"
-            "- 'multiple_choice': pick one or more options\n"
-            "- 'free_response': open text input\n\n"
-            "Use this to understand what topics the reporter cares about, "
-            "what they already know, what audience they write for, etc."
+            "Ask the reporter a BATCH of interview questions in a single form. "
+            "The reporter fills out all questions at once and submits. Strongly "
+            "prefer asking 3–6 related questions in one call over many separate "
+            "calls — it gives the reporter context for what you're trying to "
+            "learn and avoids a tedious back-and-forth. Only call this tool a "
+            "second time if a follow-up is genuinely necessary based on their "
+            "first answers.\n\n"
+            "Each question supports one of four input types:\n"
+            "- 'checklist': multi-select checkboxes (use for 'select all that apply')\n"
+            "- 'single_choice': radio buttons — pick exactly one\n"
+            "- 'multiple_choice': checkboxes — pick one or more\n"
+            "- 'free_response': open text input\n"
         ),
         "input_schema": {
             "type": "object",
             "properties": {
-                "question": {
+                "intro": {
                     "type": "string",
-                    "description": "The question to ask the reporter.",
+                    "description": "Optional 1–2 sentence intro shown above the form to frame what you're asking and why.",
                 },
-                "question_type": {
-                    "type": "string",
-                    "enum": ["checklist", "single_choice", "multiple_choice", "free_response"],
-                    "description": "The type of UI to present.",
-                },
-                "options": {
+                "questions": {
                     "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Options for checklist / single_choice / multiple_choice. Ignored for free_response.",
+                    "description": "Ordered list of questions to present in one form (3–6 recommended).",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "question": {
+                                "type": "string",
+                                "description": "The question text.",
+                            },
+                            "question_type": {
+                                "type": "string",
+                                "enum": ["checklist", "single_choice", "multiple_choice", "free_response"],
+                            },
+                            "options": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "Options for checklist / single_choice / multiple_choice. Leave empty for free_response.",
+                            },
+                        },
+                        "required": ["question", "question_type"],
+                    },
                 },
             },
-            "required": ["question", "question_type"],
+            "required": ["questions"],
         },
     },
     {
@@ -164,10 +181,12 @@ stories have already been analyzed and grouped into topics automatically.
 Your workflow:
 1. **Explore** — Start by using `view_topics` to see what topics exist in the \
 stories. Read a few representative stories to understand the coverage.
-2. **Interview** — Use `interview_user` to ask the reporter 3–5 focused \
-questions. Start with a checklist of the discovered topics so they can select \
-which ones form their beat. Then ask clarifying questions about their audience, \
-experience level, and what they need most from the guide.
+2. **Interview** — Call `interview_user` ONCE with a batch of 4–6 questions. \
+Include a short `intro` framing what you're trying to learn. Start the batch \
+with a checklist of the discovered topics so they can select which form their \
+beat, then add questions about audience, experience level, and what they need \
+most from the guide. Only call `interview_user` a second time if a follow-up \
+is truly essential based on their answers.
 3. **Research** — Based on their answers, dig deeper into the relevant stories \
 using `list_stories_in_topic`, `read_story`, and `search_stories`. Take note \
 of key sources, recurring themes, open questions, and story angles.
@@ -190,6 +209,10 @@ would need
 Be specific. Reference actual stories, names, and details from the uploaded \
 content — not generic advice. The beat book should be so useful that a brand-new \
 reporter could pick it up and immediately start producing informed coverage.
+
+**Do NOT include a table of contents.** The viewer provides its own navigation \
+from the document's headings, so a TOC in the Markdown is redundant. Start the \
+document with the title and subtitle, then go directly into "Beat Overview".
 
 Keep your conversational messages concise. Use tools frequently.\
 """
@@ -241,7 +264,7 @@ InterviewCallback = Callable[[dict], Awaitable[str]]
 # Type for the callback that sends agent text messages to the frontend
 MessageCallback   = Callable[[str], Awaitable[None]]
 # Type for the callback that reports tool execution status
-ToolStatusCallback = Callable[[str, str], Awaitable[None]]
+ToolStatusCallback = Callable[[str, str, str], Awaitable[None]]
 
 
 # Human-friendly descriptions for each tool
@@ -357,7 +380,7 @@ async def run_agent(
                         detail = story.get("title", f"#{idx}")[:60] if story else f"#{idx}"
                     elif tool_name == "search_stories":
                         detail = tool_input.get("query", "")
-                    await on_tool_status(desc, detail)
+                    await on_tool_status(tool_name, desc, detail)
 
                 if tool_name == "interview_user":
                     # This is interactive — send to frontend and await answer

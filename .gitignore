@@ -12,3 +12,10 @@ __pycache__/
 
 # OS
 .DS_Store
+
+# Generated beat books
+output/
+
+# Scraped source stories
+source-stories-alt/
+source-stories/
