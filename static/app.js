@@ -194,7 +194,7 @@
   }
 
   // ── Stepper state ────────────────────────────────────────────────────
-  const STAGE_ORDER = ["review", "write", "cite"];
+  const STAGE_ORDER = ["review", "write", "research", "cite"];
 
   function setStage(stage) {
     if (!stepperEl) return;
@@ -294,6 +294,28 @@
 
         case "questions":
           showInterview(msg);
+          break;
+
+        case "research_started":
+          setGenerating("Researching context", "Opening the sandbox for the research agent…");
+          setStage("research");
+          setShimmerIndeterminate();
+          break;
+
+        case "research_tool_status":
+          setGenerating("Researching context", formatToolDetail(msg));
+          break;
+
+        case "research_progress":
+          setGenerating("Researching context", msg.detail || msg.stage || "");
+          break;
+
+        case "research_message":
+          // Silent, mirrors the first agent's "message" handling.
+          break;
+
+        case "research_complete":
+          setGenerating("Research complete", "Handing off to citation matcher…");
           break;
 
         case "beat_book_markdown_saved":

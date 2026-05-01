@@ -3,7 +3,7 @@
 // where <stem> comes from the ?book= query param.
 
 const params = new URLSearchParams(window.location.search);
-const bookStem = params.get('book') || 'beat_book';
+const bookStem = params.get('book') || 'immigration_enforcement_beat_book';
 const beatbookFile = `/output/${encodeURIComponent(bookStem)}.json`;
 const storiesFile = `/output/${encodeURIComponent(bookStem)}_sources.json`;
 

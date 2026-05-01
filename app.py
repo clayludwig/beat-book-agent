@@ -34,6 +34,7 @@ if _env_file.exists():
 
 from pipeline import run_pipeline, PipelineResult
 from agent import run_agent
+from research_agent import run_research_agent
 from citation_matcher import (
     embed_source_stories,
     markdown_to_beatbook_entries,
@@ -117,6 +118,8 @@ sessions: Dict[str, PipelineResult] = {}
 
 OUTPUT_DIR = Path("output")
 OUTPUT_DIR.mkdir(exist_ok=True)
+SANDBOX_ROOT = OUTPUT_DIR / "sandboxes"
+SANDBOX_ROOT.mkdir(exist_ok=True)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # ROUTES
@@ -220,6 +223,11 @@ async def agent_ws(ws: WebSocket, session_id: str):
         await ws.close()
         return
 
+    # Session-scoped record of every interview round the first agent runs.
+    # The research agent reads this so it can tailor its research to the
+    # reporter's stated beat, audience, and experience level.
+    interview_log: List[Dict] = []
+
     # ── Callbacks ─────────────────────────────────────────────────────────
 
     async def on_message(text: str):
@@ -239,6 +247,12 @@ async def agent_ws(ws: WebSocket, session_id: str):
         response = await ws.receive_json()
         answers = response.get("answers", [])
 
+        interview_log.append({
+            "intro": interview_data.get("intro", ""),
+            "questions": questions,
+            "answers": answers,
+        })
+
         lines = ["Reporter's answers:", ""]
         for i, item in enumerate(answers, 1):
             q = item.get("question", "")
@@ -251,10 +265,74 @@ async def agent_ws(ws: WebSocket, session_id: str):
         return "\n".join(lines)
 
     async def on_beat_book(filename: str, markdown: str):
-        """Save markdown, run the citation matcher, save JSON + sources, send viewer URL."""
-        # Save raw markdown first so the user can always fall back to it.
+        """Run the research agent on the first agent's draft, then hand the
+        revised markdown to the citation matcher.
+
+        Pipeline: draft md → research agent (sandboxed) → revised md → citations.
+        """
+        # ── 1. Persist the raw draft so the user can fall back to it ─────
+        stem = Path(filename).stem
+        draft_path = OUTPUT_DIR / f"{stem}.draft.md"
+        draft_path.write_text(markdown, encoding="utf-8")
+
+        # ── 2. Prepare a per-session sandbox for the research agent ──────
+        sandbox_dir = SANDBOX_ROOT / session_id
+        sandbox_dir.mkdir(parents=True, exist_ok=True)
+        (sandbox_dir / filename).write_text(markdown, encoding="utf-8")
+
+        await ws.send_json({
+            "type": "research_started",
+            "filename": filename,
+        })
+
+        async def on_research_progress(stage: str, detail: str):
+            await ws.send_json({
+                "type": "research_progress",
+                "stage": stage,
+                "detail": detail,
+            })
+
+        async def on_research_tool_status(tool_name: str, desc: str, detail: str):
+            await ws.send_json({
+                "type": "research_tool_status",
+                "tool_name": tool_name,
+                "tool": desc,
+                "detail": detail,
+            })
+
+        async def on_research_text(text: str):
+            await ws.send_json({
+                "type": "research_message",
+                "text": text,
+            })
+
+        try:
+            revised_markdown = await run_research_agent(
+                sandbox_dir=sandbox_dir,
+                markdown_filename=filename,
+                interview_log=interview_log,
+                anthropic_api_key=anthropic_key,
+                on_progress=on_research_progress,
+                on_tool_status=on_research_tool_status,
+                on_text=on_research_text,
+            )
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            await ws.send_json({
+                "type": "error",
+                "text": (
+                    f"Research agent failed ({type(e).__name__}: {e}). "
+                    "Falling back to the first agent's draft."
+                ),
+            })
+            revised_markdown = markdown
+
+        await ws.send_json({"type": "research_complete"})
+
+        # ── 3. Canonical output is the revised markdown ──────────────────
         filepath = OUTPUT_DIR / filename
-        filepath.write_text(markdown, encoding="utf-8")
+        filepath.write_text(revised_markdown, encoding="utf-8")
         await ws.send_json({
             "type": "beat_book_markdown_saved",
             "filename": filename,
@@ -268,7 +346,6 @@ async def agent_ws(ws: WebSocket, session_id: str):
             })
             return
 
-        stem = filepath.stem
         stories = pipeline_result.stories
 
         citation_progress_queue: queue.Queue = queue.Queue()
@@ -278,7 +355,7 @@ async def agent_ws(ws: WebSocket, session_id: str):
 
         def run_matcher():
             source_embeddings = embed_source_stories(stories, openai_key, on_matcher_progress)
-            entries = markdown_to_beatbook_entries(markdown, source_embeddings, openai_key, on_matcher_progress)
+            entries = markdown_to_beatbook_entries(revised_markdown, source_embeddings, openai_key, on_matcher_progress)
             sources = build_sources_file(stories, source_embeddings)
             return entries, sources
 

@@ -111,14 +111,18 @@ def _is_markdown_list_item(line: str) -> bool:
     )
 
 
+def _is_markdown_table_row(line: str) -> bool:
+    return line.strip().startswith("|")
+
+
 def _is_code_block_delimiter(line: str) -> bool:
     return line.strip().startswith("```")
 
 
 def _segment_markdown(markdown: str) -> List[Dict[str, Any]]:
     """Break markdown into a sequence of entries. Sentences that live inside
-    paragraphs get `needs_embedding=True`; headings, list items, blank lines,
-    and code blocks get passed through untouched."""
+    paragraphs get `needs_embedding=True`; headings, list items, table rows,
+    blank lines, and code blocks get passed through untouched."""
     entries: List[Dict[str, Any]] = []
     in_code_block = False
 
@@ -132,7 +136,12 @@ def _segment_markdown(markdown: str) -> List[Dict[str, Any]]:
             entries.append({"content": line, "needs_embedding": False})
             continue
 
-        if not line.strip() or _is_markdown_heading(line) or _is_markdown_list_item(line):
+        if (
+            not line.strip()
+            or _is_markdown_heading(line)
+            or _is_markdown_list_item(line)
+            or _is_markdown_table_row(line)
+        ):
             entries.append({"content": line, "needs_embedding": False})
             continue
 
